@@ -22,14 +22,20 @@ export default function Learn() {
         fetch(`${API_URL}/api/lessons`).then((r) => r.json()),
         fetch(`${API_URL}/api/progress`).then((r) => r.json()),
       ]);
-      setLessons(lessonsRes);
+
+      setLessons(Array.isArray(lessonsRes) ? lessonsRes : []);
+
       const progressMap = {};
-      progressRes.forEach((p) => {
-        progressMap[p.lesson_id] = p;
-      });
+      if (Array.isArray(progressRes)) {
+        progressRes.forEach((p) => {
+          progressMap[p.lesson_id] = p;
+        });
+      }
       setProgress(progressMap);
     } catch (err) {
       console.error(err);
+      setLessons([]);
+      setProgress({});
     } finally {
       setLoading(false);
     }
@@ -40,13 +46,15 @@ export default function Learn() {
     try {
       const res = await fetch(`${API_URL}/api/vocabulary/${lesson.id}`);
       const data = await res.json();
-      setVocabulary(data);
+      setVocabulary(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setVocabulary([]);
     }
   };
 
   const playAudio = (text) => {
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
     utterance.rate = 0.8;
@@ -70,6 +78,15 @@ export default function Learn() {
     }
   };
 
+  // Bài chỉ mở khi bài trước đã đọc xong
+  const isUnlocked = (lesson) => {
+    if (lesson.order_num === 1) return true;
+    const prevLesson = lessons.find((l) => l.order_num === lesson.order_num - 1);
+    if (!prevLesson) return true;
+    const prev = progress[prevLesson.id];
+    return prev?.reading_done || prev?.status === 'completed';
+  };
+
   if (loading) {
     return (
       <div className="page learn-page">
@@ -81,7 +98,7 @@ export default function Learn() {
     );
   }
 
-  // ===== Lesson list view =====
+  // ===== Lesson list =====
   if (!selectedLesson) {
     return (
       <div className="page learn-page">
@@ -92,20 +109,28 @@ export default function Learn() {
           {lessons.map((lesson) => {
             const p = progress[lesson.id];
             const isCompleted = p?.status === 'completed';
-            const isInProgress = p?.status === 'in_progress';
             const readingDone = p?.reading_done;
+            const unlocked = isUnlocked(lesson);
 
             return (
-              <button key={lesson.id} className="lesson-card" onClick={() => openLesson(lesson)}>
+              <button
+                key={lesson.id}
+                className={`lesson-card ${!unlocked ? 'lesson-card-locked' : ''} ${isCompleted ? 'lesson-card-done' : ''}`}
+                onClick={() => unlocked && openLesson(lesson)}
+                disabled={!unlocked}
+              >
                 <div className="lesson-card-top">
                   <span className="lesson-number">Bài {lesson.order_num}</span>
-                  {isCompleted && <span className="lesson-badge done">✓ Hoàn thành</span>}
-                  {!isCompleted && isInProgress && <span className="lesson-badge progress">Đang học</span>}
-                  {readingDone && !isCompleted && <span className="lesson-badge reading">📖 Đã đọc</span>}
+                  <span>
+                    {isCompleted ? '✅' : readingDone ? '📖' : unlocked ? '🔓' : '🔒'}
+                  </span>
                 </div>
                 <h4>{lesson.title}</h4>
                 <p className="lesson-desc">{lesson.description}</p>
                 <span className="lesson-topic">{lesson.topic}</span>
+                {!unlocked && (
+                  <p className="lesson-lock-msg">Hoàn thành bài {lesson.order_num - 1} trước</p>
+                )}
               </button>
             );
           })}
@@ -114,7 +139,7 @@ export default function Learn() {
     );
   }
 
-  // ===== Lesson detail view =====
+  // ===== Lesson detail =====
   const p = progress[selectedLesson.id];
   const alreadyDone = p?.reading_done;
 
@@ -124,9 +149,7 @@ export default function Learn() {
         ← Quay lại danh sách
       </button>
 
-      <h2>
-        Bài {selectedLesson.order_num}: {selectedLesson.title}
-      </h2>
+      <h2>Bài {selectedLesson.order_num}: {selectedLesson.title}</h2>
       <p className="page-subtitle">{selectedLesson.description}</p>
 
       <section className="lesson-section">
@@ -137,7 +160,9 @@ export default function Learn() {
               <div className="vocab-hanzi">{word.hanzi}</div>
               <div className="vocab-pinyin">{word.pinyin}</div>
               <div className="vocab-meaning">{word.meaning}</div>
-              {word.example_text && <div className="vocab-example">{word.example_text}</div>}
+              {word.example_text && (
+                <div className="vocab-example">{word.example_text}</div>
+              )}
               <button className="btn-audio" onClick={() => playAudio(word.hanzi)}>
                 🔊 Nghe
               </button>
@@ -148,7 +173,7 @@ export default function Learn() {
 
       <section className="section">
         <h3>✅ Hoàn thành phần đọc</h3>
-        <p>Đã xem hết {vocabulary.length} từ vựng trong bài này chưa?</p>
+        <p>Đã xem hết {vocabulary.length} từ vựng chưa?</p>
         <button
           className="btn-primary"
           onClick={markReadingDone}
@@ -157,7 +182,7 @@ export default function Learn() {
           {alreadyDone ? '✓ Đã hoàn thành Reading' : marking ? 'Đang lưu...' : 'Đánh dấu hoàn thành Reading'}
         </button>
         <p className="hint-text">
-          💡 Tiếp theo, hãy qua tab 🎧 Listening, ✍️ Writing, 🎤 Speaking để hoàn thành đủ 4 kỹ năng của bài này!
+          💡 Tiếp theo: 🎧 Listening → ✍️ Writing → 🎤 Speaking để hoàn thành đủ 4 kỹ năng!
         </p>
       </section>
     </div>
