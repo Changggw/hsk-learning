@@ -10,7 +10,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:5000',
+        target: 'http://localhost:5001',  // Dev only
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/api'),
       },
@@ -20,9 +20,5 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     minify: 'terser',
-    chunkSizeWarningLimit: 1000,
   },
-  define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
-  },
-})
+})  
